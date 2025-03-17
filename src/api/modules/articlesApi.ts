@@ -1,34 +1,19 @@
-import request from '../request'
+import axiosInstance from './axiosInstance'
 
 export const articlesApi = {
   getList(params: any) {
-    return request({
-      url: '/articles',
-      method: 'get',
-      params
-    })
+    return axiosInstance.get('/articles', { params })
   },
 
   add(data: any) {
-    return request({
-      url: '/articles',
-      method: 'post',
-      data
-    })
+    return axiosInstance.post('/articles', data)
   },
 
   update(id: number, data: any) {
-    return request({
-      url: `/articles/${id}`,
-      method: 'put',
-      data
-    })
+    return axiosInstance.put(`/articles/${id}`, data)
   },
 
-  delete(id: number) {
-    return request({
-      url: `/articles/${id}`,
-      method: 'delete'
-    })
+  deleteArticle(id: number) {
+    return axiosInstance.delete(`/articles/${id}`)
   }
 }

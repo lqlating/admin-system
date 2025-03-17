@@ -1,34 +1,19 @@
-import request from '../request'
+import axiosInstance from './axiosInstance'
 
 export const booksApi = {
   getList(params: any) {
-    return request({
-      url: '/books',
-      method: 'get',
-      params
-    })
+    return axiosInstance.get('/books', { params })
   },
 
   add(data: any) {
-    return request({
-      url: '/books',
-      method: 'post',
-      data
-    })
+    return axiosInstance.post('/books', data)
   },
 
   update(id: number, data: any) {
-    return request({
-      url: `/books/${id}`,
-      method: 'put',
-      data
-    })
+    return axiosInstance.put(`/books/${id}`, data)
   },
 
-  delete(id: number) {
-    return request({
-      url: `/books/${id}`,
-      method: 'delete'
-    })
+  deleteBook(id: number) {
+    return axiosInstance.delete(`/books/${id}`)
   }
 }

@@ -1,26 +1,7 @@
-import request from '../request'
+import axiosInstance from './axiosInstance' // 引入 axios 实例
 
 export const commentsApi = {
-  getList(params: any) {
-    return request({
-      url: '/comments',
-      method: 'get',
-      params
-    })
-  },
-
-  update(id: number, data: any) {
-    return request({
-      url: `/comments/${id}`,
-      method: 'put',
-      data
-    })
-  },
-
-  delete(id: number) {
-    return request({
-      url: `/comments/${id}`,
-      method: 'delete'
-    })
+  deleteComment(id: number) {
+    return axiosInstance.delete(`/comments/${id}`) // 使用 axiosInstance 发送删除请求
   }
 }

@@ -27,7 +27,7 @@ export const useBooksStore = defineStore('books', () => {
   }
 
   const deleteBook = async (id: number) => {
-    await booksApi.delete(id)
+    await booksApi.deleteBook(id)
     await getBooks({})
   }
 
