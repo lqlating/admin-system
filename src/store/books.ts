@@ -1,28 +1,40 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { booksApi } from '@/api/modules/booksApi'
+import type { Book } from '@/types/book'
 
 export const useBooksStore = defineStore('books', () => {
-  const bookList = ref([])
+  const bookList = ref<Book[]>([])
+  const normalBooks = ref<Book[]>([])
+  const bannedBooks = ref<Book[]>([])
   const loading = ref(false)
 
-  const getBooks = async (params: any) => {
+  const getBooks = async (params: { status?: 'pending' | 'banned' | 'normal' }) => {
     loading.value = true
     try {
-      const res = await booksApi.getList(params)
-      bookList.value = res.data
+      let res
+      if (params.status === 'pending') {
+        res = await booksApi.getUnreviewed()
+        bookList.value = res.data.data
+      } else if (params.status === 'banned') {
+        res = await booksApi.getBanned()
+        bannedBooks.value = res.data.data
+      } else {
+        res = await booksApi.getList()
+        normalBooks.value = res.data.data
+      }
     } finally {
       loading.value = false
     }
   }
 
-  const addBook = async (data: any) => {
+  const addBook = async (data: Partial<Book>) => {
     await booksApi.add(data)
     await getBooks({})
   }
 
-  const updateBook = async (id: number, data: any) => {
-    await booksApi.update(id, data)
+  const updateBook = async (book: Partial<Book>) => {
+    await booksApi.update(book)
     await getBooks({})
   }
 
@@ -31,12 +43,28 @@ export const useBooksStore = defineStore('books', () => {
     await getBooks({})
   }
 
+  // 新增方法：设置书籍为已审核且被禁止
+  const setBookReviewedAndBanned = async (id: number) => {
+    await booksApi.setReviewedAndBanned(id)
+    await getBooks({ status: 'pending' })
+  }
+
+  // 新增方法：解除书籍禁止状态
+  const unbanBook = async (id: number) => {
+    await booksApi.unbanBook(id)
+    await getBooks({ status: 'banned' })
+  }
+
   return {
     bookList,
+    normalBooks,
+    bannedBooks,
     loading,
     getBooks,
     addBook,
     updateBook,
-    deleteBook
+    deleteBook,
+    setBookReviewedAndBanned,
+    unbanBook
   }
 })

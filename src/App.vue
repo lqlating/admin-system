@@ -1,12 +1,8 @@
 <template>
   <div class="app-container">
-    <el-container v-if="$route.path !== '/login'">
+    <el-container v-if="route.path !== '/login'">
       <el-aside width="200px">
-        <el-menu
-          :router="true"
-          class="sidebar-menu"
-          default-active="books"
-        >
+        <el-menu :router="true" class="sidebar-menu" default-active="books">
           <el-menu-item index="/books">
             <el-icon>
               <DocumentIcon />
@@ -33,7 +29,7 @@
           </el-menu-item>
         </el-menu>
         <div class="logout-button">
-          <el-button type="text" @click="handleLogout">
+          <el-button type="default" @click="handleLogout" class="logout-btn">
             <el-icon>
               <SwitchButtonIcon />
             </el-icon>
@@ -57,9 +53,10 @@ import {
   User as UserIcon,
   SwitchButton as SwitchButtonIcon
 } from '@element-plus/icons-vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
+const route = useRoute()
 
 const handleLogout = () => {
   localStorage.removeItem('isLoggedIn')
@@ -69,8 +66,9 @@ const handleLogout = () => {
 
 <style scoped>
 .app-container {
-  height: 100vh;
+  height: 725px;
   display: flex;
+  overflow: hidden;
 }
 
 .el-container {
@@ -79,21 +77,39 @@ const handleLogout = () => {
 }
 
 .sidebar-menu {
-  height: 100%;
+  height: calc(100% - 60px);
   border-right: none;
 }
 
 .el-aside {
   background-color: #304156;
   box-shadow: 2px 0 6px rgba(0, 21, 41, 0.35);
-  height: 100vh;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .main-content {
   background-color: #f0f2f5;
   padding: 20px;
-  height: 100vh;
+  height: 100%;
   overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.logout-button {
+  margin-top: auto;
+  padding: 10px;
+}
+
+.logout-btn {
+  color: #bfcbd9;
+  width: 100%;
+  text-align: left;
+}
+
+.logout-btn:hover {
+  color: #fff;
 }
 
 :deep(.el-menu) {
@@ -117,30 +133,6 @@ const handleLogout = () => {
 
 :deep(.el-menu-item .el-icon) {
   color: inherit;
-  margin-right: 10px;
-}
-
-.logout-button {
-  position: absolute;
-  bottom: 20px;
-  left: 0;
-  width: 100%;
-  padding: 0 20px;
-  box-sizing: border-box;
-}
-
-.logout-button .el-button {
-  color: #bfcbd9;
-  width: 100%;
-  text-align: left;
-  padding-left: 20px;
-}
-
-.logout-button .el-button:hover {
-  color: #fff;
-}
-
-.logout-button .el-icon {
   margin-right: 10px;
 }
 </style>

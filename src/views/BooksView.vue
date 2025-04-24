@@ -1,63 +1,253 @@
 <template>
   <div class="books-container">
     <h2>书籍管理</h2>
-    <DataList
-      :normal-data="normalBooks"
-      :pending-data="pendingBooks"
-      :reported-data="reportedBooks"
-    >
-      <el-table-column prop="id" label="ID" width="180" />
-      <el-table-column prop="title" label="书名" />
-      <el-table-column prop="author" label="作者" />
-      <el-table-column prop="status" label="状态" />
-      <el-table-column label="操作" width="180">
-        <template #default="scope">
-          <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+    <DataList :pending-data="bookList" :reported-data="reportedBooks" :normal-data="bannedBooks"
+      @row-click="handleRowClick" default-active-tab="pending" :show-pending="true">
+      <template #default="{ row, activeTab }">
+        <el-table-column prop="book_id" label="ID" width="80" />
+        <el-table-column prop="book_title" label="书名" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="book_writer" label="作者" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="book_type" label="类型" min-width="100" />
+        <el-table-column label="状态" min-width="100">
+          <template #default="scope">
+            <el-tag type="danger" v-if="scope.row.is_banned">
+              已封禁
+            </el-tag>
+            <el-tag type="warning" v-else-if="scope.row.is_reported">
+              被举报
+            </el-tag>
+            <el-tag type="info" v-else>
+              待审核
+            </el-tag>
+          </template>
+        </el-table-column>
+        <!-- 只在被举报页面显示举报原因 -->
+        <template v-if="activeTab === 'reported'">
+          <el-table-column label="举报原因" min-width="150" show-overflow-tooltip>
+            <template #default="scope">
+              <span v-if="scope.row.report_reason">{{ scope.row.report_reason }}</span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
         </template>
-      </el-table-column>
+        <el-table-column label="操作" width="180">
+          <template #default="scope">
+            <!-- a. 被举报书籍 -->
+            <template v-if="scope.row.is_reported && !scope.row.is_banned">
+              <el-button size="small" type="success" @click.stop="handleIgnoreReport(scope.row)">
+                忽略
+              </el-button>
+              <el-button size="small" type="danger" @click.stop="handleBan(scope.row.book_id)">
+                封禁
+              </el-button>
+            </template>
+            <!-- b. 待审核但未被举报书籍 -->
+            <template v-else-if="!scope.row.is_banned && !scope.row.is_reported">
+              <el-button size="small" type="success" @click.stop="handleApprove(scope.row.book_id)">
+                通过
+              </el-button>
+              <el-button size="small" type="danger" @click.stop="handleBan(scope.row.book_id)">
+                封禁
+              </el-button>
+            </template>
+            <!-- c. 已封禁书籍 -->
+            <template v-else>
+              <el-button size="small" type="primary" @click.stop="handleUnban(scope.row.book_id)">
+                解封
+              </el-button>
+            </template>
+          </template>
+        </el-table-column>
+      </template>
     </DataList>
+
+    <!-- 书籍详情弹窗 -->
+    <transition name="fade">
+      <div v-if="selectedBook" class="book-detail-overlay" @click.self="closeBookDetail">
+        <book-detail :book="selectedBook" @close="closeBookDetail" />
+      </div>
+    </transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import DataList from '../components/DataList.vue'
+import BookDetail from '../components/book_detail/book_detail.vue'
+import { useBooksStore } from '@/store/books'
+import { ElMessage } from 'element-plus'
+import type { Book } from '@/types/book'
+import reportApi from '@/api/modules/reportApi'
+import { booksApi } from '@/api/modules/booksApi'
 
-interface Book {
-  id: number
-  title: string
-  author: string
-  status: string
+// 定义举报对象的接口
+interface Report {
+  report_id: number
+  report_content_id: number
+  report_reason: string
+  reporter_id?: number
 }
 
-const normalBooks = ref<Book[]>([
-  { id: 1, title: '三体', author: '刘慈欣', status: '已上架' },
-  { id: 2, title: '百年孤独', author: '加西亚·马尔克斯', status: '已上架' }
-])
+const booksStore = useBooksStore()
+const { bookList, bannedBooks } = storeToRefs(booksStore)
+const { getBooks, setBookReviewedAndBanned, unbanBook } = booksStore
 
-const pendingBooks = ref<Book[]>([
-  { id: 3, title: '新书待审核', author: '张三', status: '待审核' },
-  { id: 4, title: '待审核图书', author: '李四', status: '待审核' }
-])
+const reportedBooks = ref<any[]>([])
+const selectedBook = ref<Book | null>(null)
 
-const reportedBooks = ref<Book[]>([
-  { id: 5, title: '被举报图书', author: '王五', status: '被举报' },
-  { id: 6, title: '违规图书', author: '赵六', status: '被举报' }
-])
-
-const handleEdit = (row: Book) => {
-  console.log('编辑', row)
+const handleRowClick = (row: Book) => {
+  selectedBook.value = row
 }
 
-const handleDelete = (row: Book) => {
-  console.log('删除', row)
+const closeBookDetail = () => {
+  selectedBook.value = null
+}
+
+const fetchData = async () => {
+  try {
+    await getBooks({ status: 'pending' })
+    await getBooks({ status: 'banned' })
+
+    // 获取被举报书籍
+    try {
+      const reportedRes = await reportApi.getReportsByBookType()
+      console.log('书籍举报数据 API 返回:', reportedRes)
+
+      // 检查是否有数据
+      if (reportedRes.data && reportedRes.data.data) {
+        const reports = reportedRes.data.data as Report[]
+
+        // 检查报告内容
+        console.log('报告内容样例:', reports.length > 0 ? reports[0] : '无数据')
+
+        // 获取被举报书籍的详细信息
+        const reportedBooksDetails: any[] = [];
+
+        // 使用Set去重，避免同一本书有多个举报时重复获取
+        const uniqueBookIds = new Set<number>();
+        for (const report of reports) {
+          if (!report.report_content_id) continue;
+          uniqueBookIds.add(report.report_content_id);
+        }
+
+        // 对每个唯一的book_id获取详情
+        for (const bookId of uniqueBookIds) {
+          // 检查书籍ID是否已存在于被封禁列表中
+          if (bannedBooks.value.some(banned => banned.book_id === bookId)) {
+            continue; // 跳过已封禁的书籍
+          }
+
+          try {
+            // 使用booksApi获取书籍详情
+            const bookRes = await booksApi.getBookById(bookId);
+            console.log(`书籍ID=${bookId}的详情:`, bookRes);
+
+            if (bookRes.data && bookRes.data.code === 1 && bookRes.data.data) {
+              const bookDetail = bookRes.data.data;
+
+              // 获取该书籍的所有举报
+              const bookReports = reports.filter(report => report.report_content_id === bookId);
+
+              // 对每个举报创建一个书籍条目
+              for (const report of bookReports) {
+                reportedBooksDetails.push({
+                  ...bookDetail,
+                  is_reported: true,
+                  report_reason: report.report_reason,
+                  report_id: report.report_id,
+                  reporter_id: report.reporter_id
+                });
+              }
+            }
+          } catch (error) {
+            console.error(`获取书籍ID=${bookId}详情失败:`, error);
+          }
+        }
+
+        reportedBooks.value = reportedBooksDetails;
+        console.log('处理后的被举报书籍:', reportedBooks.value)
+      } else {
+        reportedBooks.value = []
+        console.log('没有书籍举报数据')
+      }
+    } catch (error) {
+      console.error('获取举报数据失败:', error)
+      reportedBooks.value = []
+    }
+
+  } catch (error) {
+    console.error('获取数据失败:', error)
+    ElMessage.error('获取书籍失败')
+  }
+}
+
+onMounted(fetchData)
+
+const handleApprove = async (bookId: number) => {
+  try {
+    await setBookReviewedAndBanned(bookId)
+    ElMessage.success('审核通过成功')
+    await fetchData()
+  } catch {
+    ElMessage.error('操作失败')
+  }
+}
+
+const handleBan = async (bookId: number) => {
+  try {
+    await setBookReviewedAndBanned(bookId)
+    ElMessage.success('封禁成功')
+    await fetchData()
+  } catch {
+    ElMessage.error('操作失败')
+  }
+}
+
+const handleUnban = async (bookId: number) => {
+  try {
+    await unbanBook(bookId)
+    ElMessage.success('解封成功')
+    await fetchData()
+  } catch {
+    ElMessage.error('操作失败')
+  }
+}
+
+const handleIgnoreReport = async (row: any) => {
+  try {
+    // 检查是否有report_id
+    if (!row.report_id) {
+      console.error('缺少举报ID:', row);
+      ElMessage.warning('无法确定要忽略的举报ID');
+      return;
+    }
+
+    console.log('忽略举报ID:', row.report_id);
+    // 调用删除举报API
+    const res = await reportApi.deleteReport(row.report_id);
+    console.log('删除举报返回:', res);
+
+    if (res.data && res.data.code === 1) {
+      ElMessage.success('已忽略举报');
+      // 从举报列表中移除该书籍
+      reportedBooks.value = reportedBooks.value.filter(
+        book => book.report_id !== row.report_id
+      );
+    } else {
+      throw new Error(res.data?.msg || '忽略举报失败');
+    }
+  } catch (error: any) {
+    console.error('忽略举报失败:', error);
+    ElMessage.error(`操作失败: ${error.message || '未知错误'}`);
+  }
 }
 </script>
 
 <style scoped>
 .books-container {
   min-height: calc(100vh - 40px);
+  position: relative;
 }
 
 h2 {
@@ -85,15 +275,32 @@ h2::before {
   margin: 0 4px;
 }
 
-:deep(.el-table .warning-row) {
-  background: #fdf6ec;
+:deep(.el-tag) {
+  margin: 0 4px;
 }
 
-:deep(.el-table .success-row) {
-  background: #f0f9eb;
+/* 书籍详情遮罩层 */
+.book-detail-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
 }
 
-:deep(.el-table .danger-row) {
-  background: #fef0f0;
+/* 淡入淡出动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>
