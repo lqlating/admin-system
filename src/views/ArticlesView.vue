@@ -178,12 +178,25 @@ const fetchUserName = async (userId: number) => {
   }
 }
 
-const fetchData = async () => {
+const fetchData = async (preservedCache?: Record<number, string>) => {
   try {
-    // 清空用户名缓存
-    Object.keys(userNameCache).forEach(key => {
-      delete userNameCache[Number(key)];
-    });
+    // 如果提供了保留的缓存，则使用它，否则清空
+    if (!preservedCache) {
+      // 清空用户名缓存
+      Object.keys(userNameCache).forEach(key => {
+        delete userNameCache[Number(key)];
+      });
+    } else {
+      // 使用保留的缓存替换当前缓存
+      Object.keys(userNameCache).forEach(key => {
+        delete userNameCache[Number(key)];
+      });
+
+      // 复制缓存值
+      Object.keys(preservedCache).forEach(key => {
+        userNameCache[Number(key)] = preservedCache[Number(key)];
+      });
+    }
 
     await getPendingArticles()
     await getBannedArticles()
@@ -315,9 +328,14 @@ onMounted(async () => {
 
 const handleApprove = async (articleId: number) => {
   try {
+    // 保存当前缓存的用户名映射
+    const cachedUserNames = { ...userNameCache };
+
     await setReviewed(articleId)
     ElMessage.success('审核通过成功')
-    await fetchData()
+
+    // 修改fetchData调用方式，传入保存的缓存
+    await fetchData(cachedUserNames)
   } catch (error) {
     ElMessage.error('操作失败')
   }
@@ -325,9 +343,14 @@ const handleApprove = async (articleId: number) => {
 
 const handleBan = async (articleId: number) => {
   try {
+    // 保存当前缓存的用户名映射
+    const cachedUserNames = { ...userNameCache };
+
     await setReviewedAndBanned(articleId)
     ElMessage.success('封禁成功')
-    await fetchData()
+
+    // 修改fetchData调用方式，传入保存的缓存
+    await fetchData(cachedUserNames)
   } catch (error) {
     ElMessage.error('操作失败')
   }
@@ -335,9 +358,14 @@ const handleBan = async (articleId: number) => {
 
 const handleUnban = async (articleId: number) => {
   try {
+    // 保存当前缓存的用户名映射
+    const cachedUserNames = { ...userNameCache };
+
     await unbanArticle(articleId)
     ElMessage.success('解封成功')
-    await fetchData()
+
+    // 修改fetchData调用方式，传入保存的缓存
+    await fetchData(cachedUserNames)
   } catch (error) {
     ElMessage.error('操作失败')
   }
@@ -345,6 +373,9 @@ const handleUnban = async (articleId: number) => {
 
 const handleIgnoreReport = async (row: any) => {
   try {
+    // 保存当前缓存的用户名映射
+    const cachedUserNames = { ...userNameCache };
+
     // 检查是否有report_id
     if (!row.report_id) {
       console.error('缺少举报ID:', row);
@@ -366,6 +397,9 @@ const handleIgnoreReport = async (row: any) => {
     } else {
       throw new Error(res.data?.msg || '忽略举报失败');
     }
+
+    // 重新获取数据时传入用户名缓存
+    await fetchData(cachedUserNames);
   } catch (error: any) {
     console.error('忽略举报失败:', error);
     ElMessage.error(`操作失败: ${error.message || '未知错误'}`);
