@@ -2,7 +2,7 @@
   <div class="books-container">
     <h2>书籍管理</h2>
     <DataList :pending-data="bookList" :reported-data="reportedBooks" :normal-data="bannedBooks"
-      @row-click="handleRowClick" default-active-tab="pending" :show-pending="true">
+      @row-click="handleRowClick" default-active-tab="pending" :show-pending="true" content-type="book">
       <template #default="{ row, activeTab }">
         <el-table-column prop="book_id" label="ID" width="80" />
         <el-table-column prop="book_title" label="书名" min-width="200" show-overflow-tooltip />

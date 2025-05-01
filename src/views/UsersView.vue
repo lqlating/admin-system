@@ -2,7 +2,7 @@
   <div class="users-container">
     <h2>用户管理</h2>
     <DataList :normal-data="bannedUsers" :pending-data="[]" :reported-data="reportedUsers" :show-pending="false"
-      default-active-tab="reported">
+      default-active-tab="reported" content-type="user">
       <template #default="{ row }">
         <el-table-column prop="user_id" label="ID" width="100" />
         <el-table-column prop="username" label="用户名" />

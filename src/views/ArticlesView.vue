@@ -2,7 +2,7 @@
   <div class="articles-container">
     <h2>文章管理</h2>
     <DataList :pending-data="articleList" :reported-data="reportedArticles" :normal-data="bannedArticles"
-      @row-click="handleRowClick">
+      @row-click="handleRowClick" content-type="article">
       <template #default="{ row, activeTab }">
         <el-table-column prop="article_id" label="ID" width="80" />
         <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />

@@ -2,7 +2,7 @@
     <div class="comments-container">
         <h2>评论管理</h2>
         <DataList :pending-data="[]" :reported-data="reportedComments" :normal-data="bannedComments"
-            @row-click="handleRowClick" :show-pending="false" default-active-tab="reported">
+            @row-click="handleRowClick" :show-pending="false" default-active-tab="reported" content-type="comment">
             <template #default="{ row }">
                 <el-table-column prop="comment_id" label="ID" width="80" />
                 <el-table-column prop="content" label="内容" min-width="200" show-overflow-tooltip />
