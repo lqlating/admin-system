@@ -1,25 +1,16 @@
 <template>
   <div class="articles-container">
     <h2>文章管理</h2>
-    
-    <!-- 搜索框 -->
-    <div class="search-container">
-      <el-input
-        v-model="searchText"
-        placeholder="搜索文章标题、内容或举报原因"
-        prefix-icon="el-icon-search"
-        clearable
-        @input="handleSearch"
-        class="search-input"
-      />
-    </div>
-    
-    <DataList :pending-data="filteredArticleList" :reported-data="filteredReportedArticles" :normal-data="filteredBannedArticles"
+    <DataList :pending-data="articleList" :reported-data="reportedArticles" :normal-data="bannedArticles"
       @row-click="handleRowClick">
       <template #default="{ row, activeTab }">
         <el-table-column prop="article_id" label="ID" width="80" />
         <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="author_name" label="作者" min-width="120" show-overflow-tooltip />
+        <el-table-column label="作者" min-width="120" show-overflow-tooltip>
+          <template #default="scope">
+            {{ getUserName(scope.row) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="publication_time" label="发布时间" min-width="160" />
         <el-table-column label="状态" min-width="100">
           <template #default="scope">
@@ -34,6 +25,8 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="report_count" label="举报次数" width="100"
+          v-if="activeTab === 'reported' || activeTab === 'banned'" />
         <el-table-column label="举报原因" min-width="150" show-overflow-tooltip>
           <template #default="scope">
             <span v-if="scope.row.report_reason">{{ scope.row.report_reason }}</span>
@@ -82,7 +75,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, reactive } from 'vue'
 import { storeToRefs } from 'pinia'
 import DataList from '../components/DataList.vue'
 import ArticleInner from '../components/article/article_inner.vue'
@@ -91,6 +84,7 @@ import type { Article } from '@/types/article'
 import { ElMessage } from 'element-plus'
 import reportApi from '@/api/modules/reportApi'
 import articleApi from '@/api/modules/articleApi'
+import userApi from '@/api/modules/userApi'
 
 // 定义举报对象的接口
 interface Report {
@@ -100,49 +94,15 @@ interface Report {
   reporter_id?: number
 }
 
+// 用户名缓存，避免重复请求
+const userNameCache = reactive<Record<number, string>>({});
+
 const articlesStore = useArticlesStore()
 const { articleList, bannedArticles } = storeToRefs(articlesStore)
 const { getPendingArticles, getBannedArticles, setReviewed, setReviewedAndBanned, unbanArticle } = articlesStore
 
 const selectedArticle = ref<Article | null>(null)
 const reportedArticles = ref<Article[]>([])
-const searchText = ref('') // 搜索文本
-
-// 筛选逻辑
-const filteredArticleList = computed(() => {
-  if (!searchText.value) return articleList.value
-  const search = searchText.value.toLowerCase()
-  return articleList.value.filter(article => 
-    (article.title && article.title.toLowerCase().includes(search)) || 
-    (article.content && article.content.toLowerCase().includes(search)) ||
-    (article.report_reason && article.report_reason.toLowerCase().includes(search))
-  )
-})
-
-const filteredReportedArticles = computed(() => {
-  if (!searchText.value) return reportedArticles.value
-  const search = searchText.value.toLowerCase()
-  return reportedArticles.value.filter(article => 
-    (article.title && article.title.toLowerCase().includes(search)) || 
-    (article.content && article.content.toLowerCase().includes(search)) ||
-    (article.report_reason && article.report_reason.toLowerCase().includes(search))
-  )
-})
-
-const filteredBannedArticles = computed(() => {
-  if (!searchText.value) return bannedArticles.value
-  const search = searchText.value.toLowerCase()
-  return bannedArticles.value.filter(article => 
-    (article.title && article.title.toLowerCase().includes(search)) || 
-    (article.content && article.content.toLowerCase().includes(search)) ||
-    (article.report_reason && article.report_reason.toLowerCase().includes(search))
-  )
-})
-
-// 搜索处理
-const handleSearch = () => {
-  console.log('搜索文本:', searchText.value)
-}
 
 const handleRowClick = (row: Article) => {
   selectedArticle.value = row
@@ -152,12 +112,96 @@ const closeArticleDetail = () => {
   selectedArticle.value = null
 }
 
+// 获取用户名的函数
+const getUserName = (article: any): string => {
+  if (!article) return '未知';
+
+  // 如果article对象包含作者名，直接使用
+  if (article.username) return article.username;
+  if (article.author_name) return article.author_name;
+
+  // 如果存在author_id，根据ID查询用户名
+  // 先检查是否有缓存
+  if (article.author_id && userNameCache[article.author_id]) {
+    return userNameCache[article.author_id];
+  }
+
+  // 如果没有缓存但有ID，异步获取并更新缓存
+  if (article.author_id) {
+    // 触发用户信息加载
+    fetchUserName(article.author_id);
+
+    // 返回临时显示内容
+    return `加载中...`;
+  }
+
+  return '未知';
+}
+
+// 异步获取用户名并更新缓存
+const fetchUserName = async (userId: number) => {
+  try {
+    if (!userId) return;
+
+    // 如果已经在缓存中，不重复请求
+    if (userNameCache[userId] && userNameCache[userId] !== '加载中...') return;
+
+    // 标记为正在加载，避免重复请求
+    userNameCache[userId] = '加载中...';
+
+    const res = await userApi.SearchUserById(userId);
+
+    // 从响应中提取用户数据
+    if (res.data && res.data.code === 1 && res.data.data) {
+      // 注意：API返回的是数组形式，需要取第一个元素
+      const userData = Array.isArray(res.data.data) ? res.data.data[0] : res.data.data;
+
+      // 如果userData存在且有username字段
+      if (userData && userData.username) {
+        userNameCache[userId] = userData.username;
+        // 强制更新组件
+        setTimeout(() => {
+          // 这里使用个空操作来触发组件刷新
+          articleList.value = [...articleList.value];
+          reportedArticles.value = [...reportedArticles.value];
+          bannedArticles.value = [...bannedArticles.value];
+        }, 0);
+      } else {
+        // 如果没有找到用户名，显示ID
+        userNameCache[userId] = `用户ID: ${userId}`;
+      }
+    } else {
+      userNameCache[userId] = `用户ID: ${userId}`;
+    }
+  } catch (error) {
+    console.error(`获取用户ID=${userId}的信息失败:`, error);
+    userNameCache[userId] = `用户ID: ${userId}`;
+  }
+}
+
 const fetchData = async () => {
   try {
+    // 清空用户名缓存
+    Object.keys(userNameCache).forEach(key => {
+      delete userNameCache[Number(key)];
+    });
+
     await getPendingArticles()
     await getBannedArticles()
     console.log('待审核文章:', articleList.value)
     console.log('已封禁文章:', bannedArticles.value)
+
+    // 预加载所有文章作者的用户信息
+    const authorIds = new Set<number>();
+
+    // 收集所有需要加载的作者ID
+    articleList.value.forEach(article => {
+      if (article.author_id) authorIds.add(article.author_id);
+    });
+
+    bannedArticles.value.forEach(article => {
+      if (article.author_id) authorIds.add(article.author_id);
+    });
 
     // 获取被举报文章
     try {
@@ -178,12 +222,8 @@ const fetchData = async () => {
           if (!report.report_content_id) continue;
 
           // 检查文章ID是否已存在于被封禁列表中
-          const bannedArticle = bannedArticles.value.find(banned => banned.article_id === report.report_content_id);
-          
-          if (bannedArticle) {
-            // 为已封禁文章添加举报原因
-            bannedArticle.report_reason = report.report_reason;
-            continue; // 跳过添加到举报列表
+          if (bannedArticles.value.some(banned => banned.article_id === report.report_content_id)) {
+            continue; // 跳过已封禁的文章
           }
 
           try {
@@ -191,6 +231,10 @@ const fetchData = async () => {
             const articleRes = await articleApi.getArticlesByIds([report.report_content_id]);
             if (articleRes.data?.data?.length > 0) {
               const articleDetail = articleRes.data.data[0];
+              // 收集作者ID
+              if (articleDetail.author_id) {
+                authorIds.add(articleDetail.author_id);
+              }
               // 扩展文章对象以添加举报相关字段
               reportedArticlesDetails.push({
                 ...articleDetail,
@@ -217,13 +261,29 @@ const fetchData = async () => {
 
     // 过滤掉待审核文章中已封禁的文章
     articleList.value = articleList.value.filter(article => !article.is_banned)
+
+    // 批量预加载所有作者用户信息
+    console.log('需要加载的作者ID数量:', authorIds.size);
+
+    // 批量加载用户信息，使用Promise.all并行加载
+    if (authorIds.size > 0) {
+      const loadPromises = Array.from(authorIds).map(authorId => {
+        return fetchUserName(authorId);
+      });
+
+      await Promise.all(loadPromises);
+      console.log('所有用户信息加载完成');
+    }
+
   } catch (error) {
     console.error('获取数据失败:', error)
     ElMessage.error('获取文章失败')
   }
 }
 
-onMounted(fetchData)
+onMounted(async () => {
+  await fetchData();
+})
 
 const handleApprove = async (articleId: number) => {
   try {
@@ -310,16 +370,6 @@ h2::before {
   width: 4px;
   background-color: #409eff;
   border-radius: 2px;
-}
-
-.search-container {
-  margin-bottom: 20px;
-  display: flex;
-  justify-content: center;
-}
-
-.search-input {
-  width: 500px;
 }
 
 :deep(.el-button) {
