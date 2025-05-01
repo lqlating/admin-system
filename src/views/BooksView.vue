@@ -1,7 +1,20 @@
 <template>
   <div class="books-container">
     <h2>书籍管理</h2>
-    <DataList :pending-data="bookList" :reported-data="reportedBooks" :normal-data="bannedBooks"
+    
+    <!-- 搜索框 -->
+    <div class="search-container">
+      <el-input
+        v-model="searchText"
+        placeholder="搜索书籍名称、作者、类型或举报原因"
+        prefix-icon="el-icon-search"
+        clearable
+        @input="handleSearch"
+        class="search-input"
+      />
+    </div>
+    
+    <DataList :pending-data="filteredBookList" :reported-data="filteredReportedBooks" :normal-data="filteredBannedBooks"
       @row-click="handleRowClick" default-active-tab="pending" :show-pending="true">
       <template #default="{ row, activeTab }">
         <el-table-column prop="book_id" label="ID" width="80" />
@@ -21,15 +34,12 @@
             </el-tag>
           </template>
         </el-table-column>
-        <!-- 只在被举报页面显示举报原因 -->
-        <template v-if="activeTab === 'reported'">
-          <el-table-column label="举报原因" min-width="150" show-overflow-tooltip>
-            <template #default="scope">
-              <span v-if="scope.row.report_reason">{{ scope.row.report_reason }}</span>
-              <span v-else>-</span>
-            </template>
-          </el-table-column>
-        </template>
+        <el-table-column label="举报原因" min-width="150" show-overflow-tooltip>
+          <template #default="scope">
+            <span v-if="scope.row.report_reason">{{ scope.row.report_reason }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="180">
           <template #default="scope">
             <!-- a. 被举报书籍 -->
@@ -71,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import DataList from '../components/DataList.vue'
 import BookDetail from '../components/book_detail/book_detail.vue'
@@ -95,6 +105,49 @@ const { getBooks, setBookReviewedAndBanned, unbanBook } = booksStore
 
 const reportedBooks = ref<any[]>([])
 const selectedBook = ref<Book | null>(null)
+const searchText = ref('') // 搜索文本
+
+// 筛选逻辑
+const filteredBookList = computed(() => {
+  if (!searchText.value) return bookList.value
+  const search = searchText.value.toLowerCase()
+  return bookList.value.filter(book => 
+    (book.book_title && book.book_title.toLowerCase().includes(search)) || 
+    (book.book_writer && book.book_writer.toLowerCase().includes(search)) ||
+    (book.book_type && book.book_type.toLowerCase().includes(search)) ||
+    (book.book_intro && book.book_intro.toLowerCase().includes(search)) ||
+    (book.report_reason && book.report_reason.toLowerCase().includes(search))
+  )
+})
+
+const filteredReportedBooks = computed(() => {
+  if (!searchText.value) return reportedBooks.value
+  const search = searchText.value.toLowerCase()
+  return reportedBooks.value.filter(book => 
+    (book.book_title && book.book_title.toLowerCase().includes(search)) || 
+    (book.book_writer && book.book_writer.toLowerCase().includes(search)) ||
+    (book.book_type && book.book_type.toLowerCase().includes(search)) ||
+    (book.book_intro && book.book_intro.toLowerCase().includes(search)) ||
+    (book.report_reason && book.report_reason.toLowerCase().includes(search))
+  )
+})
+
+const filteredBannedBooks = computed(() => {
+  if (!searchText.value) return bannedBooks.value
+  const search = searchText.value.toLowerCase()
+  return bannedBooks.value.filter(book => 
+    (book.book_title && book.book_title.toLowerCase().includes(search)) || 
+    (book.book_writer && book.book_writer.toLowerCase().includes(search)) ||
+    (book.book_type && book.book_type.toLowerCase().includes(search)) ||
+    (book.book_intro && book.book_intro.toLowerCase().includes(search)) ||
+    (book.report_reason && book.report_reason.toLowerCase().includes(search))
+  )
+})
+
+// 搜索处理
+const handleSearch = () => {
+  console.log('搜索文本:', searchText.value)
+}
 
 const handleRowClick = (row: Book) => {
   selectedBook.value = row
@@ -126,9 +179,22 @@ const fetchData = async () => {
 
         // 使用Set去重，避免同一本书有多个举报时重复获取
         const uniqueBookIds = new Set<number>();
+        const bookIdToReportMap = new Map<number, Report>();
+        
         for (const report of reports) {
           if (!report.report_content_id) continue;
           uniqueBookIds.add(report.report_content_id);
+          
+          // 保存每个书籍ID对应的举报信息，如果有多个举报，保留最新的一个
+          bookIdToReportMap.set(report.report_content_id, report);
+        }
+
+        // 为已封禁的书籍添加举报原因
+        for (const bannedBook of bannedBooks.value) {
+          const report = bookIdToReportMap.get(bannedBook.book_id);
+          if (report) {
+            bannedBook.report_reason = report.report_reason;
+          }
         }
 
         // 对每个唯一的book_id获取详情
@@ -145,12 +211,9 @@ const fetchData = async () => {
 
             if (bookRes.data && bookRes.data.code === 1 && bookRes.data.data) {
               const bookDetail = bookRes.data.data;
-
-              // 获取该书籍的所有举报
-              const bookReports = reports.filter(report => report.report_content_id === bookId);
-
-              // 对每个举报创建一个书籍条目
-              for (const report of bookReports) {
+              const report = bookIdToReportMap.get(bookId);
+              
+              if (report) {
                 reportedBooksDetails.push({
                   ...bookDetail,
                   is_reported: true,
@@ -269,6 +332,16 @@ h2::before {
   width: 4px;
   background-color: #409eff;
   border-radius: 2px;
+}
+
+.search-container {
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.search-input {
+  width: 500px;
 }
 
 :deep(.el-button) {

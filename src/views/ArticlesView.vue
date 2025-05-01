@@ -1,7 +1,20 @@
 <template>
   <div class="articles-container">
     <h2>文章管理</h2>
-    <DataList :pending-data="articleList" :reported-data="reportedArticles" :normal-data="bannedArticles"
+    
+    <!-- 搜索框 -->
+    <div class="search-container">
+      <el-input
+        v-model="searchText"
+        placeholder="搜索文章标题、内容或举报原因"
+        prefix-icon="el-icon-search"
+        clearable
+        @input="handleSearch"
+        class="search-input"
+      />
+    </div>
+    
+    <DataList :pending-data="filteredArticleList" :reported-data="filteredReportedArticles" :normal-data="filteredBannedArticles"
       @row-click="handleRowClick">
       <template #default="{ row, activeTab }">
         <el-table-column prop="article_id" label="ID" width="80" />
@@ -21,15 +34,12 @@
             </el-tag>
           </template>
         </el-table-column>
-        <!-- 只在被举报页面显示举报原因 -->
-        <template v-if="activeTab === 'reported'">
-          <el-table-column label="举报原因" min-width="150" show-overflow-tooltip>
-            <template #default="scope">
-              <span v-if="scope.row.report_reason">{{ scope.row.report_reason }}</span>
-              <span v-else>-</span>
-            </template>
-          </el-table-column>
-        </template>
+        <el-table-column label="举报原因" min-width="150" show-overflow-tooltip>
+          <template #default="scope">
+            <span v-if="scope.row.report_reason">{{ scope.row.report_reason }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="scope">
             <!-- 被举报文章显示忽略和封禁按钮 -->
@@ -72,7 +82,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import DataList from '../components/DataList.vue'
 import ArticleInner from '../components/article/article_inner.vue'
@@ -96,6 +106,43 @@ const { getPendingArticles, getBannedArticles, setReviewed, setReviewedAndBanned
 
 const selectedArticle = ref<Article | null>(null)
 const reportedArticles = ref<Article[]>([])
+const searchText = ref('') // 搜索文本
+
+// 筛选逻辑
+const filteredArticleList = computed(() => {
+  if (!searchText.value) return articleList.value
+  const search = searchText.value.toLowerCase()
+  return articleList.value.filter(article => 
+    (article.title && article.title.toLowerCase().includes(search)) || 
+    (article.content && article.content.toLowerCase().includes(search)) ||
+    (article.report_reason && article.report_reason.toLowerCase().includes(search))
+  )
+})
+
+const filteredReportedArticles = computed(() => {
+  if (!searchText.value) return reportedArticles.value
+  const search = searchText.value.toLowerCase()
+  return reportedArticles.value.filter(article => 
+    (article.title && article.title.toLowerCase().includes(search)) || 
+    (article.content && article.content.toLowerCase().includes(search)) ||
+    (article.report_reason && article.report_reason.toLowerCase().includes(search))
+  )
+})
+
+const filteredBannedArticles = computed(() => {
+  if (!searchText.value) return bannedArticles.value
+  const search = searchText.value.toLowerCase()
+  return bannedArticles.value.filter(article => 
+    (article.title && article.title.toLowerCase().includes(search)) || 
+    (article.content && article.content.toLowerCase().includes(search)) ||
+    (article.report_reason && article.report_reason.toLowerCase().includes(search))
+  )
+})
+
+// 搜索处理
+const handleSearch = () => {
+  console.log('搜索文本:', searchText.value)
+}
 
 const handleRowClick = (row: Article) => {
   selectedArticle.value = row
@@ -131,8 +178,12 @@ const fetchData = async () => {
           if (!report.report_content_id) continue;
 
           // 检查文章ID是否已存在于被封禁列表中
-          if (bannedArticles.value.some(banned => banned.article_id === report.report_content_id)) {
-            continue; // 跳过已封禁的文章
+          const bannedArticle = bannedArticles.value.find(banned => banned.article_id === report.report_content_id);
+          
+          if (bannedArticle) {
+            // 为已封禁文章添加举报原因
+            bannedArticle.report_reason = report.report_reason;
+            continue; // 跳过添加到举报列表
           }
 
           try {
@@ -259,6 +310,16 @@ h2::before {
   width: 4px;
   background-color: #409eff;
   border-radius: 2px;
+}
+
+.search-container {
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.search-input {
+  width: 500px;
 }
 
 :deep(.el-button) {

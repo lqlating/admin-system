@@ -1,7 +1,20 @@
 <template>
     <div class="comments-container">
         <h2>评论管理</h2>
-        <DataList :pending-data="[]" :reported-data="reportedComments" :normal-data="bannedComments"
+        
+        <!-- 搜索框 -->
+        <div class="search-container">
+            <el-input
+                v-model="searchText"
+                placeholder="搜索评论内容、用户名或举报原因"
+                prefix-icon="el-icon-search"
+                clearable
+                @input="handleSearch"
+                class="search-input"
+            />
+        </div>
+        
+        <DataList :pending-data="[]" :reported-data="filteredReportedComments" :normal-data="filteredBannedComments"
             @row-click="handleRowClick" :show-pending="false" default-active-tab="reported">
             <template #default="{ row }">
                 <el-table-column prop="comment_id" label="ID" width="80" />
@@ -70,7 +83,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import DataList from '../components/DataList.vue'
 import CommentDetail from '../components/comment/comment_detail.vue'
@@ -86,6 +99,33 @@ const { getBannedComments, setReviewedAndBanned, unbanComment } = commentsStore
 
 const reportedComments = ref<Comment[]>([])
 const selectedComment = ref<Comment | null>(null)
+const searchText = ref('') // 搜索文本
+
+// 筛选逻辑
+const filteredReportedComments = computed(() => {
+    if (!searchText.value) return reportedComments.value
+    const search = searchText.value.toLowerCase()
+    return reportedComments.value.filter(comment => 
+        (comment.content && comment.content.toLowerCase().includes(search)) || 
+        (comment.user_name && comment.user_name.toLowerCase().includes(search)) ||
+        (comment.report_reason && comment.report_reason.toLowerCase().includes(search))
+    )
+})
+
+const filteredBannedComments = computed(() => {
+    if (!searchText.value) return bannedComments.value
+    const search = searchText.value.toLowerCase()
+    return bannedComments.value.filter(comment => 
+        (comment.content && comment.content.toLowerCase().includes(search)) || 
+        (comment.user_name && comment.user_name.toLowerCase().includes(search)) ||
+        (comment.report_reason && comment.report_reason.toLowerCase().includes(search))
+    )
+})
+
+// 搜索处理
+const handleSearch = () => {
+    console.log('搜索文本:', searchText.value)
+}
 
 // 获取评论类型
 const getCommentType = (comment: Comment): string => {
@@ -147,8 +187,12 @@ const fetchData = async () => {
                     if (!report.report_content_id) continue;
 
                     // 检查评论ID是否已存在于被封禁列表中
-                    if (bannedComments.value.some(banned => banned.comment_id === report.report_content_id)) {
-                        continue; // 跳过已封禁的评论
+                    const bannedComment = bannedComments.value.find(banned => banned.comment_id === report.report_content_id);
+                    
+                    if (bannedComment) {
+                        // 为已封禁评论添加举报原因
+                        bannedComment.report_reason = report.report_reason;
+                        continue; // 跳过添加到举报列表
                     }
 
                     try {
@@ -263,6 +307,16 @@ h2::before {
     width: 4px;
     background-color: #409eff;
     border-radius: 2px;
+}
+
+.search-container {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: center;
+}
+
+.search-input {
+    width: 500px;
 }
 
 :deep(.el-button) {
