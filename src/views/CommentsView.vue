@@ -32,6 +32,7 @@
                         </el-tag>
                     </template>
                 </el-table-column>
+                <el-table-column prop="report_count" label="举报次数" width="100" />
                 <el-table-column label="举报原因" min-width="150" show-overflow-tooltip>
                     <template #default="scope">
                         <span v-if="scope.row.report_reason">{{ scope.row.report_reason }}</span>
@@ -140,32 +141,60 @@ const fetchData = async () => {
                 // 检查报告内容
                 console.log('报告内容样例:', reports.length > 0 ? reports[0] : '无数据')
 
+                // 按照评论ID对举报进行分组
+                const reportGroups: Record<number, any[]> = {};
+
+                // 将报告按内容ID分组
+                reports.forEach((report: any) => {
+                    if (!report.report_content_id) return;
+
+                    // 如果该内容ID已被封禁，跳过
+                    if (bannedComments.value.some(banned => banned.comment_id === report.report_content_id)) {
+                        return;
+                    }
+
+                    if (!reportGroups[report.report_content_id]) {
+                        reportGroups[report.report_content_id] = [];
+                    }
+                    reportGroups[report.report_content_id].push(report);
+                });
+
+                console.log('分组后的评论举报:', reportGroups);
+
                 // 获取被举报评论的详细信息
                 const reportedCommentsDetails: Comment[] = [];
 
-                for (const report of reports) {
-                    if (!report.report_content_id) continue;
-
-                    // 检查评论ID是否已存在于被封禁列表中
-                    if (bannedComments.value.some(banned => banned.comment_id === report.report_content_id)) {
-                        continue; // 跳过已封禁的评论
-                    }
+                // 处理每组举报
+                for (const commentId in reportGroups) {
+                    const numericCommentId = Number(commentId);
+                    const commentReports = reportGroups[numericCommentId];
 
                     try {
                         // 获取评论详情
-                        const commentRes = await commentApi.findCommentsByCommentId(report.report_content_id);
+                        const commentRes = await commentApi.findCommentsByCommentId(numericCommentId);
                         if (commentRes.data?.data?.length > 0) {
                             const commentDetail = commentRes.data.data[0];
+
+                            // 合并举报原因
+                            const uniqueReasons = new Set<string>();
+                            commentReports.forEach(report => {
+                                if (report.report_reason) uniqueReasons.add(report.report_reason);
+                            });
+
+                            // 创建合并后的举报原因
+                            const mergedReasons = Array.from(uniqueReasons).join('; ');
+
                             // 扩展评论对象以添加举报相关字段
                             reportedCommentsDetails.push({
                                 ...commentDetail,
                                 is_reported: 1,
-                                report_reason: report.report_reason,
-                                report_id: report.report_id
+                                report_reason: mergedReasons,
+                                report_count: commentReports.length,
+                                report_id: commentReports[0].report_id // 保留第一个举报ID用于操作
                             } as Comment);
                         }
                     } catch (error) {
-                        console.error(`获取评论ID=${report.report_content_id}详情失败:`, error);
+                        console.error(`获取评论ID=${numericCommentId}详情失败:`, error);
                     }
                 }
 

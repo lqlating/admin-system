@@ -25,9 +25,8 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="report_count" label="举报次数" width="100"
-          v-if="activeTab === 'reported' || activeTab === 'banned'" />
-        <el-table-column label="举报原因" min-width="150" show-overflow-tooltip>
+        <el-table-column prop="report_count" label="举报次数" width="100" v-if="activeTab === 'reported'" />
+        <el-table-column label="举报原因" min-width="150" show-overflow-tooltip v-if="activeTab !== 'banned'">
           <template #default="scope">
             <span v-if="scope.row.report_reason">{{ scope.row.report_reason }}</span>
             <span v-else>-</span>
@@ -215,36 +214,65 @@ const fetchData = async () => {
         // 检查报告内容
         console.log('报告内容样例:', reports.length > 0 ? reports[0] : '无数据')
 
+        // 按照文章ID对举报进行分组
+        const reportGroups: Record<number, Report[]> = {};
+
+        // 将报告按内容ID分组
+        reports.forEach((report: Report) => {
+          if (!report.report_content_id) return;
+
+          // 如果该内容ID已被封禁，跳过
+          if (bannedArticles.value.some(banned => banned.article_id === report.report_content_id)) {
+            return;
+          }
+
+          if (!reportGroups[report.report_content_id]) {
+            reportGroups[report.report_content_id] = [];
+          }
+          reportGroups[report.report_content_id].push(report);
+        });
+
+        console.log('分组后的举报:', reportGroups);
+
         // 获取被举报文章的详细信息
         const reportedArticlesDetails: Article[] = [];
 
-        for (const report of reports) {
-          if (!report.report_content_id) continue;
-
-          // 检查文章ID是否已存在于被封禁列表中
-          if (bannedArticles.value.some(banned => banned.article_id === report.report_content_id)) {
-            continue; // 跳过已封禁的文章
-          }
+        // 处理每组举报
+        for (const contentId in reportGroups) {
+          const articleId = Number(contentId);
+          const reportsForArticle = reportGroups[articleId];
 
           try {
             // 获取文章详情
-            const articleRes = await articleApi.getArticlesByIds([report.report_content_id]);
+            const articleRes = await articleApi.getArticlesByIds([articleId]);
             if (articleRes.data?.data?.length > 0) {
               const articleDetail = articleRes.data.data[0];
+
               // 收集作者ID
               if (articleDetail.author_id) {
                 authorIds.add(articleDetail.author_id);
               }
+
+              // 合并举报原因
+              const uniqueReasons = new Set<string>();
+              reportsForArticle.forEach(report => {
+                if (report.report_reason) uniqueReasons.add(report.report_reason);
+              });
+
+              // 创建合并后的举报原因
+              const mergedReasons = Array.from(uniqueReasons).join('; ');
+
               // 扩展文章对象以添加举报相关字段
               reportedArticlesDetails.push({
                 ...articleDetail,
                 is_reported: true,
-                report_reason: report.report_reason,
-                report_id: report.report_id
+                report_reason: mergedReasons,
+                report_count: reportsForArticle.length,
+                report_id: reportsForArticle[0].report_id // 保留第一个举报ID用于操作
               } as Article);
             }
           } catch (error) {
-            console.error(`获取文章ID=${report.report_content_id}详情失败:`, error);
+            console.error(`获取文章ID=${articleId}详情失败:`, error);
           }
         }
 

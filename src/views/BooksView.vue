@@ -21,8 +21,9 @@
             </el-tag>
           </template>
         </el-table-column>
-        <!-- 只在被举报页面显示举报原因 -->
+        <!-- 只在被举报页面显示举报次数和原因 -->
         <template v-if="activeTab === 'reported'">
+          <el-table-column prop="report_count" label="举报次数" width="100" />
           <el-table-column label="举报原因" min-width="150" show-overflow-tooltip>
             <template #default="scope">
               <span v-if="scope.row.report_reason">{{ scope.row.report_reason }}</span>
@@ -124,44 +125,60 @@ const fetchData = async () => {
         // 获取被举报书籍的详细信息
         const reportedBooksDetails: any[] = [];
 
-        // 使用Set去重，避免同一本书有多个举报时重复获取
-        const uniqueBookIds = new Set<number>();
-        for (const report of reports) {
-          if (!report.report_content_id) continue;
-          uniqueBookIds.add(report.report_content_id);
-        }
+        // 按照书籍ID对举报进行分组
+        const reportGroups: Record<number, Report[]> = {};
+
+        // 将报告按内容ID分组
+        reports.forEach(report => {
+          if (!report.report_content_id) return;
+
+          // 如果该内容ID已被封禁，跳过
+          if (bannedBooks.value.some(banned => banned.book_id === report.report_content_id)) {
+            return;
+          }
+
+          if (!reportGroups[report.report_content_id]) {
+            reportGroups[report.report_content_id] = [];
+          }
+          reportGroups[report.report_content_id].push(report);
+        });
+
+        console.log('分组后的举报:', reportGroups);
 
         // 对每个唯一的book_id获取详情
-        for (const bookId of uniqueBookIds) {
-          // 检查书籍ID是否已存在于被封禁列表中
-          if (bannedBooks.value.some(banned => banned.book_id === bookId)) {
-            continue; // 跳过已封禁的书籍
-          }
+        for (const bookId in reportGroups) {
+          const numericBookId = Number(bookId);
+          const bookReports = reportGroups[numericBookId];
 
           try {
             // 使用booksApi获取书籍详情
-            const bookRes = await booksApi.getBookById(bookId);
-            console.log(`书籍ID=${bookId}的详情:`, bookRes);
+            const bookRes = await booksApi.getBookById(numericBookId);
+            console.log(`书籍ID=${numericBookId}的详情:`, bookRes);
 
             if (bookRes.data && bookRes.data.code === 1 && bookRes.data.data) {
               const bookDetail = bookRes.data.data;
 
-              // 获取该书籍的所有举报
-              const bookReports = reports.filter(report => report.report_content_id === bookId);
+              // 合并举报原因
+              const uniqueReasons = new Set<string>();
+              bookReports.forEach(report => {
+                if (report.report_reason) uniqueReasons.add(report.report_reason);
+              });
 
-              // 对每个举报创建一个书籍条目
-              for (const report of bookReports) {
-                reportedBooksDetails.push({
-                  ...bookDetail,
-                  is_reported: true,
-                  report_reason: report.report_reason,
-                  report_id: report.report_id,
-                  reporter_id: report.reporter_id
-                });
-              }
+              // 创建合并后的举报原因
+              const mergedReasons = Array.from(uniqueReasons).join('; ');
+
+              // 创建包含聚合举报信息的书籍条目
+              reportedBooksDetails.push({
+                ...bookDetail,
+                is_reported: true,
+                report_reason: mergedReasons,
+                report_count: bookReports.length,
+                report_id: bookReports[0].report_id, // 保留第一个举报ID用于操作
+                reporter_id: bookReports[0].reporter_id
+              });
             }
           } catch (error) {
-            console.error(`获取书籍ID=${bookId}详情失败:`, error);
+            console.error(`获取书籍ID=${numericBookId}详情失败:`, error);
           }
         }
 
