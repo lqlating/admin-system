@@ -57,6 +57,11 @@ export const booksApi = {
     return axiosInstance.put(`/book/setReviewedAndBanned/${bookId}`)
   },
 
+  // 设置书籍为已审核通过
+  setReviewed(bookId: number) {
+    return axiosInstance.put(`/book/setReviewed/${bookId}`)
+  },
+
   // 解除书籍禁止状态
   unbanBook(bookId: number) {
     return axiosInstance.put(`/book/unban/${bookId}`)

@@ -92,7 +92,7 @@ interface Report {
 
 const booksStore = useBooksStore()
 const { bookList, bannedBooks } = storeToRefs(booksStore)
-const { getBooks, setBookReviewedAndBanned, unbanBook } = booksStore
+const { getBooks, setBookReviewed, setBookReviewedAndBanned, unbanBook } = booksStore
 
 const reportedBooks = ref<any[]>([])
 const selectedBook = ref<Book | null>(null)
@@ -203,7 +203,7 @@ onMounted(fetchData)
 
 const handleApprove = async (bookId: number) => {
   try {
-    await setBookReviewedAndBanned(bookId)
+    await setBookReviewed(bookId)
     ElMessage.success('审核通过成功')
     await fetchData()
   } catch {

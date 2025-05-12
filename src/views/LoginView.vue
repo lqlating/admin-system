@@ -3,32 +3,16 @@
     <div class="login-box">
       <h2>后台管理系统</h2>
       <el-form :model="loginForm" :rules="rules" ref="loginFormRef">
-        <el-form-item prop="username">
-          <el-input
-            v-model="loginForm.username"
-            placeholder="请输入用户名"
-            :prefix-icon="User"
-            size="large"
-          />
+        <el-form-item prop="account">
+          <el-input v-model="loginForm.account" placeholder="请输入管理员账号" :prefix-icon="User" size="large" />
         </el-form-item>
         <el-form-item prop="password">
-          <el-input
-            v-model="loginForm.password"
-            type="password"
-            placeholder="请输入密码"
-            :prefix-icon="Lock"
-            show-password
-            size="large"
-          />
+          <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" :prefix-icon="Lock" show-password
+            size="large" @keyup.enter="handleLogin" />
         </el-form-item>
         <el-form-item>
-          <el-button
-            type="primary"
-            @click="handleLogin"
-            :loading="loading"
-            class="login-button"
-            size="large"
-          >
+          <el-button type="primary" @click="handleLogin" :loading="adminStore.loading" class="login-button"
+            size="large">
             登录
           </el-button>
         </el-form-item>
@@ -40,21 +24,21 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
+import { useAdminStore } from '@/store/admin'
 
 const router = useRouter()
-const loading = ref(false)
 const loginFormRef = ref()
+const adminStore = useAdminStore()
 
 const loginForm = reactive({
-  username: '',
+  account: '',
   password: ''
 })
 
 const rules = {
-  username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' }
+  account: [
+    { required: true, message: '请输入管理员账号', trigger: 'blur' }
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' }
@@ -65,20 +49,17 @@ const handleLogin = async () => {
   if (!loginFormRef.value) return
 
   try {
-    loading.value = true
+    // 表单验证
     await loginFormRef.value.validate()
 
-    if (loginForm.username === '123456' && loginForm.password === '123456') {
-      localStorage.setItem('isLoggedIn', 'true')
-      ElMessage.success('登录成功')
+    // 调用登录接口
+    const success = await adminStore.login(loginForm.account, loginForm.password)
+
+    if (success) {
       router.push('/books')
-    } else {
-      ElMessage.error('用户名或密码错误')
     }
   } catch (error) {
     console.error('表单验证失败:', error)
-  } finally {
-    loading.value = false
   }
 }
 </script>
@@ -111,6 +92,7 @@ const handleLogin = async () => {
     opacity: 0;
     transform: translateY(-20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);

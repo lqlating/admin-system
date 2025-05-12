@@ -43,13 +43,19 @@ export const useBooksStore = defineStore('books', () => {
     await getBooks({})
   }
 
-  // 新增方法：设置书籍为已审核且被禁止
+  // 设置书籍为已审核通过
+  const setBookReviewed = async (id: number) => {
+    await booksApi.setReviewed(id)
+    await getBooks({ status: 'pending' })
+  }
+
+  // 设置书籍为已审核且被禁止
   const setBookReviewedAndBanned = async (id: number) => {
     await booksApi.setReviewedAndBanned(id)
     await getBooks({ status: 'pending' })
   }
 
-  // 新增方法：解除书籍禁止状态
+  // 解除书籍禁止状态
   const unbanBook = async (id: number) => {
     await booksApi.unbanBook(id)
     await getBooks({ status: 'banned' })
@@ -64,6 +70,7 @@ export const useBooksStore = defineStore('books', () => {
     addBook,
     updateBook,
     deleteBook,
+    setBookReviewed,
     setBookReviewedAndBanned,
     unbanBook
   }

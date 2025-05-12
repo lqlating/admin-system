@@ -27,6 +27,12 @@
             </el-icon>
             <span>用户管理</span>
           </el-menu-item>
+          <el-menu-item index="/titles">
+            <el-icon>
+              <FolderIcon />
+            </el-icon>
+            <span>板块管理</span>
+          </el-menu-item>
         </el-menu>
         <div class="logout-button">
           <el-button type="default" @click="handleLogout" class="logout-btn">
@@ -51,15 +57,18 @@ import {
   Reading as ReadingIcon,
   ChatLineRound as ChatLineRoundIcon,
   User as UserIcon,
+  Folder as FolderIcon,
   SwitchButton as SwitchButtonIcon
 } from '@element-plus/icons-vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useAdminStore } from '@/store/admin'
 
 const router = useRouter()
 const route = useRoute()
+const adminStore = useAdminStore()
 
 const handleLogout = () => {
-  localStorage.removeItem('isLoggedIn')
+  adminStore.logout()
   router.push('/login')
 }
 </script>
